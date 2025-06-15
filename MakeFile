@@ -1,0 +1,67 @@
+GCC_PREFIX = riscv32-unknown-elf
+ABI = -march=rv32gcv_zbb_zbs -mabi=ilp32f
+LINK = ./veer/link.ld
+CODEFOLDER = ./assembly
+TEMPPATH = ./veer/tempFiles
+
+allV: compileV executeV
+all: compileNV executeNV
+
+cleanV:
+	rm -f $(TEMPPATH)/logV.txt $(TEMPPATH)/programV.elf $(TEMPPATH)/TESTV.dis
+
+compileV:
+	$(GCC_PREFIX)-gcc $(ABI) -lgcc -T$(LINK) -o $(TEMPPATH)/programV.elf $(CODEFOLDER)/Vectorized.s -nostartfiles -lm
+	$(GCC_PREFIX)-objdump -S $(TEMPPATH)/programV.elf > $(TEMPPATH)/TESTV.dis
+	$(GCC_PREFIX)-objdump -d $(TEMPPATH)/programV.elf > $(TEMPPATH)/TESTV_raw.txt
+
+executeV:
+	-whisper --interactive $(TEMPPATH)/programV.elf -s 0x80000000 --tohost 0xd0580000 -f $(TEMPPATH)/logV.txt --configfile ./veer/whisper.json
+	python3 python/print_log_array.py -1 V
+
+allNV: compileNV executeNV
+
+cleanNV:
+	rm -f $(TEMPPATH)/logNV.txt $(TEMPPATH)/programNV.elf $(TEMPPATH)/TESTNV.dis
+
+compileNV:
+	$(GCC_PREFIX)-gcc $(ABI) -lgcc -T$(LINK) -o $(TEMPPATH)/programNV.elf $(CODEFOLDER)/NonVectorized.s -nostartfiles -lm
+	$(GCC_PREFIX)-objdump -S $(TEMPPATH)/programNV.elf > $(TEMPPATH)/TESTNV.dis
+	$(GCC_PREFIX)-objdump -d $(TEMPPATH)/programNV.elf > $(TEMPPATH)/TESTNV_raw.txt
+
+executeNV:
+	-whisper -x $(TEMPPATH)/programNV.elf -s 0x80000000 --tohost 0xd0580000 -f $(TEMPPATH)/logNV.txt --configfile ./veer/whisper.json
+	python3 python/print_log_array.py -1 NV
+
+testNV:
+	python3 python/write_array.py $(filter-out $@,$(MAKECMDGOALS)) NV
+	$(GCC_PREFIX)-gcc $(ABI) -lgcc -T$(LINK) -o $(TEMPPATH)/programNV.elf $(CODEFOLDER)/NonVectorizedModified.s -nostartfiles -lm
+	$(GCC_PREFIX)-objdump -S $(TEMPPATH)/programNV.elf > $(TEMPPATH)/TESTNV.dis
+	-whisper -x $(TEMPPATH)/programNV.elf -s 0x80000000 --tohost 0xd0580000 -f $(TEMPPATH)/logNV.txt --configfile ./veer/whisper.json
+	python3 python/print_log_array.py $(filter-out $@,$(MAKECMDGOALS)) NV
+
+testV:
+	python3 python/write_array.py $(filter-out $@,$(MAKECMDGOALS)) V
+	$(GCC_PREFIX)-gcc $(ABI) -lgcc -T$(LINK) -o $(TEMPPATH)/programV.elf $(CODEFOLDER)/VectorizedModified.s -nostartfiles -lm
+	$(GCC_PREFIX)-objdump -S $(TEMPPATH)/programV.elf > $(TEMPPATH)/TESTV.dis
+	-whisper -x $(TEMPPATH)/programV.elf -s 0x80000000 --tohost 0xd0580000 -f $(TEMPPATH)/logV.txt --configfile ./veer/whisper.json
+	python3 python/print_log_array.py $(filter-out $@,$(MAKECMDGOALS)) V
+
+# C CODE PART
+CCODEFOLDER = ./c-code
+CCODEFILE = $(CCODEFOLDER)/code.c
+CC = gcc
+CFLAGS = -Wall -Wextra -O2
+TARGET = a.out
+
+allc: cleanc compilec executec
+
+compilec:
+	$(CC) $(CFLAGS) $(CCODEFILE) -o $(CCODEFOLDER)/$(TARGET) -lm
+
+executec:
+	./$(CCODEFOLDER)/$(TARGET)
+
+cleanc:
+	rm -f ./$(CCODEFOLDER)/$(TARGET)
+
